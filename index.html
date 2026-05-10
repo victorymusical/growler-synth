@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Growler – Wind-Modeled Synth Engine</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; }
+
+        /* THE STUDIO PALETTE */
+        #growler-app-wrapper {
+            --gold: #c5a059;
+            --gold-dark: #8b6e35;
+            --lava: #ff1a00;
+            --bg: #0a0a0a;
+            --panel: rgba(15, 15, 15, 0.95);
+
+            background-color: var(--bg);
+            background-image: linear-gradient(rgba(10, 10, 10, 0.92), rgba(10, 10, 10, 0.92)), url('https://cdn.shopify.com/s/files/1/1768/9095/files/pattern.png?v=1778443096');
+            background-size: cover;
+            background-position: center;
+            color: white;
+            font-family: -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 10px;
+            user-select: none;
+            width: 100%;
+            min-height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        #growler-app-wrapper * { box-sizing: border-box; }
+
+        /* BRANDING HEADER */
+        #growler-app-wrapper .header-container { display: flex; flex-direction: column; align-items: center; margin-bottom: 25px; text-align: center; }
+        #growler-app-wrapper .brand-logo { height: 75px; margin-bottom: 10px; filter: invert(1) drop-shadow(0px 4px 6px rgba(0,0,0,0.8)); opacity: 0.85; max-width: 100%; object-fit: contain; }
+        #growler-app-wrapper .subtitle { color: var(--gold); font-size: 0.85rem; letter-spacing: 4px; margin-top: 5px; text-transform: uppercase; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+
+        /* THE CONSOLE LAYOUT */
+        #growler-app-wrapper .console {
+            display: flex; flex-direction: column; background: var(--panel); border: 2px solid #222; border-top: 2px solid #333;
+            border-radius: 12px; padding: 20px; box-shadow: 0 30px 60px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,0,0,0.6);
+            width: 100%; max-width: 1050px;
+        }
+
+        /* TOP RACK */
+        #growler-app-wrapper .rack-top { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-bottom: 25px; width: 100%; }
+
+        /* BOTTOM RACK */
+        #growler-app-wrapper .rack-bottom { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: center; border-top: 2px solid #222; padding-top: 25px; width: 100%; }
+
+        /* MODULE BLOCKS */
+        #growler-app-wrapper .module { display: flex; flex-direction: column; align-items: center; background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 8px; padding: 15px 10px; box-shadow: inset 0 4px 10px rgba(0,0,0,0.8); flex: 1 1 160px; min-width: 160px; }
+
+        #growler-app-wrapper .mod-title { font-size: 0.55rem; color: var(--gold-dark); font-weight: bold; letter-spacing: 2px; margin-bottom: 20px; text-transform: uppercase; text-align: center; }
+        #growler-app-wrapper .controls-row { display: flex; gap: 15px; justify-content: center; width: 100%; }
+        #growler-app-wrapper .controls-col { display: flex; flex-direction: column; align-items: center; gap: 15px; width: 100%; }
+        #growler-app-wrapper .control-unit { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        #growler-app-wrapper label { font-size: 0.5rem; color: #aaa; font-weight: bold; letter-spacing: 1px; text-align: center; margin: 0; padding: 0; }
+
+        /* CUSTOM ROTARY KNOBS */
+        #growler-app-wrapper .knob-wrapper { position: relative; width: 44px; height: 44px; display: flex; justify-content: center; align-items: center; cursor: ns-resize; touch-action: none; }
+        #growler-app-wrapper .knob-wrapper.large { width: 70px; height: 70px; }
+        #growler-app-wrapper .knob-visual { width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #333, #0a0a0a); border: 2px solid #000; box-shadow: 0 5px 10px rgba(0,0,0,0.8), inset 0 2px 3px rgba(255,255,255,0.1); position: relative; transform: rotate(-135deg); }
+        #growler-app-wrapper .knob-wrapper.large .knob-visual { border: 3px solid #000; background: radial-gradient(circle at 30% 30%, #444, #050505); }
+        #growler-app-wrapper .knob-indicator { position: absolute; top: 10%; left: 50%; width: 3px; height: 30%; background: var(--gold); transform: translateX(-50%); border-radius: 2px; box-shadow: 0 0 5px var(--gold); }
+        #growler-app-wrapper .knob-wrapper.large .knob-indicator { width: 4px; background: var(--lava); box-shadow: 0 0 8px var(--lava); }
+        #growler-app-wrapper .knob-wrapper input[type=range] { display: none; }
+
+        /* VERTICAL FADERS */
+        #growler-app-wrapper .fader-vertical { -webkit-appearance: slider-vertical; width: 15px; height: 90px; background: #000; border: 1px solid #222; border-radius: 3px; outline: none; box-shadow: inset 0 2px 4px rgba(0,0,0,0.8); cursor: pointer; margin: 0; }
+        #growler-app-wrapper .fader-vertical::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 10px; border-radius: 2px; background: linear-gradient(to right, var(--gold) 0%, var(--gold-dark) 100%); border: 1px solid #000; box-shadow: 0 4px 8px rgba(0,0,0,0.8); }
+
+        /* HORIZONTAL SLIDERS */
+        #growler-app-wrapper .slider-horiz { -webkit-appearance: none; width: 100px; height: 4px; background: #000; border: 1px solid #222; border-radius: 2px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.8); margin: 0; }
+        #growler-app-wrapper .slider-horiz::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 18px; border-radius: 2px; background: var(--gold); border: 1px solid #000; cursor: pointer; }
+        #growler-app-wrapper .slider-horiz:active::-webkit-slider-thumb { background: var(--lava); }
+
+        /* DIGITAL LCD SCREENS */
+        #growler-app-wrapper .lcd-screen { background: #050000; color: var(--lava); border: 2px solid #000; border-top: 2px solid #111; padding: 6px 4px; font-weight: bold; text-align: center; border-radius: 4px; font-size: 0.75rem; font-family: 'Courier New', Courier, monospace; box-shadow: inset 0 2px 5px rgba(0,0,0,0.9), 0 0 10px rgba(255, 26, 0, 0.2); text-shadow: 0 0 8px var(--lava); outline: none; margin: 0; }
+        #growler-app-wrapper select.lcd-screen { appearance: none; cursor: pointer; padding-right: 10px; }
+        #growler-app-wrapper .pro-btn { background: #1a1a1a; color: var(--gold); border: 1px solid #333; padding: 6px 10px; font-weight: bold; cursor: pointer; border-radius: 4px; font-size: 0.6rem; box-shadow: 0 4px 6px rgba(0,0,0,0.5); margin: 0; }
+        #growler-app-wrapper .pro-btn:active { background: var(--lava); color: #fff; box-shadow: inset 0 2px 4px rgba(0,0,0,0.8); border-color: var(--lava); }
+
+        /* THE KEYBOARD */
+        #growler-app-wrapper #keyboard-wrapper { width: 100%; max-width: 750px; overflow-x: auto; padding-bottom: 10px; }
+        #growler-app-wrapper #keyboard { display: flex; background: #000; padding: 10px; border-radius: 8px; border: 2px solid #111; box-shadow: inset 0 5px 15px rgba(0,0,0,0.8); width: max-content; margin: 0 auto; }
+        #growler-app-wrapper .key { border: 1px solid #000; background: linear-gradient(to bottom, #fff 0%, #e0e0e0 100%); width: 32px; height: 140px; border-radius: 0 0 5px 5px; cursor: pointer; box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2); flex-shrink: 0; }
+        #growler-app-wrapper .key.black { background: linear-gradient(to bottom, #222 0%, #000 100%); width: 22px; height: 85px; margin-left: -11px; margin-right: -11px; z-index: 2; position: relative; border-radius: 0 0 3px 3px; box-shadow: inset 0 -3px 5px rgba(255,255,255,0.1), 2px 2px 5px rgba(0,0,0,0.5); }
+        #growler-app-wrapper .key.active { background: var(--lava) !important; box-shadow: 0 0 25px var(--lava), inset 0 0 10px rgba(0,0,0,0.5) !important; }
+        #growler-app-wrapper .status { margin-top: 20px; font-size: 0.55rem; color: #666; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div id="growler-app-wrapper">
+    <div class="header-container">
+        <img src="https://cdn.shopify.com/s/files/1/1768/9095/files/growlerlogo.png?v=1778443313" alt="TGS Logo" class="brand-logo" width="300" height="75" onerror="this.style.display='none';">
+        <div class="subtitle">The Growler • Wind-Modeled Engine</div>
+    </div>
+
+    <div class="console">
+        <div class="rack-top">
+            <div class="module">
+                <div class="mod-title">Performance</div>
+                <div class="controls-col">
+                    <div class="control-unit"><label>GLIDE SLUR</label><input type="range" id="glideTime" class="slider-horiz" min="0.01" max="0.3" step="0.01" value="0.08"></div>
+                    <div class="control-unit"><label>ATTACK</label><input type="range" id="attackStrength" class="slider-horiz" min="0" max="100" value="85"></div>
+                    <div class="control-unit"><label>KEY NOISE</label><input type="range" id="noiseAmt" class="slider-horiz" min="0" max="0.5" step="0.01" value="0.25"></div>
+                </div>
+            </div>
+
+            <div class="module">
+                <div class="mod-title">The Growl</div>
+                <div class="controls-row">
+                    <div class="control-unit">
+                        <div class="knob-wrapper"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="growlAmt" min="0" max="0.15" step="0.001" value="0.02"></div>
+                        <label>FLUTTER</label>
+                    </div>
+                    <div class="control-unit">
+                        <div class="knob-wrapper"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="growlDelay" min="0" max="1.5" step="0.1" value="0.3"></div>
+                        <label>DELAY</label>
+                    </div>
+                </div>
+                <div class="control-unit" style="margin-top: 15px;">
+                    <div class="knob-wrapper"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="filter" min="400" max="6000" value="2500"></div>
+                    <label>BRIGHTNESS</label>
+                </div>
+            </div>
+
+            <div class="module">
+                <div class="mod-title">Vibrato</div>
+                <div class="controls-col">
+                    <div class="control-unit">
+                        <div class="knob-wrapper"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="vibSpeed" min="2" max="8" step="0.1" value="5.5"></div>
+                        <label>SPEED HZ</label>
+                    </div>
+                    <div class="controls-row">
+                        <div class="control-unit">
+                            <div class="knob-wrapper"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="vibDepth" min="0" max="25" step="1" value="10"></div>
+                            <label>DEPTH</label>
+                        </div>
+                        <div class="control-unit">
+                            <div class="knob-wrapper"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="vibDelay" min="0" max="1.5" step="0.1" value="0.4"></div>
+                            <label>DELAY</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="module">
+                <div class="mod-title">Space Rack</div>
+                <div class="controls-row" style="margin-bottom: 15px; align-items: flex-end;">
+                    <div class="control-unit"><input type="range" id="delayAmt" class="fader-vertical" min="0" max="0.8" step="0.01" value="0.2"><label>ECHO</label></div>
+                    <div class="control-unit"><input type="range" id="reverbAmt" class="fader-vertical" min="0" max="0.8" step="0.01" value="0.3"><label>REVERB</label></div>
+                    <div class="control-unit"><input type="range" id="reverbTime" class="fader-vertical" min="0.1" max="0.95" step="0.01" value="0.5"><label>ROOM</label></div>
+                </div>
+                <div class="control-unit">
+                    <div style="display:flex; gap:5px;">
+                        <input type="number" id="bpmVal" class="lcd-screen" value="120" min="40" max="300" style="width: 35px;">
+                        <button id="tapBtn" class="pro-btn">TAP</button>
+                    </div>
+                    <select id="delayDiv" class="lcd-screen" style="width: 100px; margin-top:5px;">
+                        <option value="2">1/2 Note</option><option value="1" selected>1/4 Note</option><option value="0.75">Dot 1/8</option><option value="0.5">1/8 Note</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="module">
+                <div class="mod-title">Master Out</div>
+                <div class="control-unit" style="margin-top: 10px;">
+                    <div class="knob-wrapper large"><div class="knob-visual"><div class="knob-indicator"></div></div><input type="range" id="masterVol" min="0" max="1" step="0.01" value="0.5"></div>
+                    <label style="font-size: 0.65rem; color: var(--gold); margin-top: 10px;">VOLUME</label>
+                </div>
+                <div class="control-unit" style="margin-top: 15px;"><span id="dbReadout" class="lcd-screen" style="width: 60px;">-6.0 dB</span></div>
+            </div>
+        </div>
+
+        <div class="rack-bottom">
+            <div class="module" style="padding: 15px 20px; flex: 0 0 auto;">
+                <label style="margin-bottom: 12px; font-size: 0.6rem;">PITCH WHEEL</label>
+                <input type="range" id="pitchBend" class="slider-horiz" min="-2" max="2" step="0.01" value="0" style="width: 150px; height: 15px; border-radius: 8px;">
+            </div>
+            <div id="keyboard-wrapper">
+                <div id="keyboard"></div>
+            </div>
+        </div>
+    </div>
+    <div id="midi-status" class="status">Awaiting MIDI Controller...</div>
+</div>
+
+<script>
+    // --- RENDER KEYBOARD ---
+    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const keyboardEl = document.getElementById('keyboard');
+    for (let i = 0; i < 37; i++) {
+        const key = document.createElement('div');
+        key.className = `key ${notes[i % 12].includes('#') ? 'black' : 'white'}`;
+        key.dataset.note = i + 48;
+        const pressKey = (e) => { e.preventDefault(); noteAction(key.dataset.note, 100); };
+        key.onmousedown = pressKey;
+        key.addEventListener('touchstart', pressKey, {passive: false});
+        const releaseKey = () => noteOff(key.dataset.note);
+        key.onmouseup = releaseKey; key.onmouseleave = releaseKey;
+        key.addEventListener('touchend', releaseKey); key.addEventListener('touchcancel', releaseKey);
+        keyboardEl.appendChild(key);
+    }
+
+    // --- RENDER KNOBS ---
+    document.querySelectorAll('#growler-app-wrapper .knob-wrapper').forEach(wrapper => {
+        const input = wrapper.querySelector('input[type="range"]');
+        const visual = wrapper.querySelector('.knob-visual');
+        function updateVisual() {
+            const min = parseFloat(input.min) || 0; const max = parseFloat(input.max) || 100;
+            const val = parseFloat(input.value); const percent = (val - min) / (max - min);
+            const deg = (percent * 270) - 135; visual.style.transform = `rotate(${deg}deg)`;
+        }
+        updateVisual();
+        let isDragging = false; let startY; let startVal;
+        const startDrag = (e) => { isDragging = true; startY = e.touches ? e.touches[0].clientY : e.clientY; startVal = parseFloat(input.value); document.body.style.cursor = 'ns-resize'; e.preventDefault(); };
+        wrapper.addEventListener('mousedown', startDrag); wrapper.addEventListener('touchstart', startDrag, {passive: false});
+        const moveDrag = (e) => {
+            if (!isDragging) return;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const deltaY = startY - clientY;
+            const min = parseFloat(input.min) || 0; const max = parseFloat(input.max) || 100;
+            const step = parseFloat(input.step) || ((max - min) / 100); const range = max - min;
+            let newVal = startVal + (deltaY / 150) * range; newVal = Math.max(min, Math.min(max, newVal));
+            if (step) newVal = Math.round(newVal / step) * step;
+            input.value = newVal; updateVisual(); input.dispatchEvent(new Event('input'));
+        };
+        window.addEventListener('mousemove', moveDrag); window.addEventListener('touchmove', moveDrag, {passive: false});
+        const endDrag = () => { isDragging = false; document.body.style.cursor = 'default'; };
+        window.addEventListener('mouseup', endDrag); window.addEventListener('touchend', endDrag);
+        input.addEventListener('input', updateVisual);
+    });
+
+    // --- AUDIO ENGINE ---
+    let audioCtx, masterGain, reverbMix, combDelays, echoNode, echoFeedback, echoMix, noiseBuffer;
+    let engineReady = false;
+    let activeSynth = null; let heldNotes = [];
+
+    function wakeEngine() {
+        if (engineReady) return true;
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const bufferSize = audioCtx.sampleRate * 1.0; noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const output = noiseBuffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+            masterGain = audioCtx.createGain(); masterGain.gain.value = parseFloat(document.getElementById('masterVol').value); masterGain.connect(audioCtx.destination);
+            reverbMix = audioCtx.createGain(); reverbMix.connect(audioCtx.destination);
+            combDelays = [0.029, 0.034, 0.041, 0.049].map(t => {
+                const d = audioCtx.createDelay(); d.delayTime.value = t; const g = audioCtx.createGain();
+                masterGain.connect(d); d.connect(g); g.connect(d); g.connect(reverbMix); return g;
+            });
+            echoNode = audioCtx.createDelay(5.0); echoFeedback = audioCtx.createGain(); echoMix = audioCtx.createGain();
+            masterGain.connect(echoNode); echoNode.connect(echoFeedback); echoFeedback.connect(echoNode); echoNode.connect(echoMix); echoMix.connect(audioCtx.destination);
+            engineReady = true; updateEffectsMix(); updateDelayTime(); return true;
+        } catch(e) { return false; }
+    }
+
+    // --- CONTROLS ---
+    let currentPitchBend = 0; const pitchSlider = document.getElementById('pitchBend');
+    function updatePitchBend(val) {
+        currentPitchBend = val; pitchSlider.value = val;
+        if (engineReady && activeSynth && audioCtx) {
+            const bentFreq = activeSynth.baseFreq * Math.pow(2, currentPitchBend / 12);
+            activeSynth.osc.frequency.setTargetAtTime(bentFreq, audioCtx.currentTime, 0.05);
+        }
+    }
+    pitchSlider.addEventListener('input', (e) => updatePitchBend(parseFloat(e.target.value)));
+    pitchSlider.addEventListener('mouseup', () => updatePitchBend(0));
+    pitchSlider.addEventListener('touchend', () => updatePitchBend(0));
+    pitchSlider.addEventListener('mouseleave', (e) => { if (e.buttons > 0) updatePitchBend(0); });
+
+    const volSlider = document.getElementById('masterVol'); const dbReadout = document.getElementById('dbReadout');
+    volSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (engineReady && masterGain && audioCtx) masterGain.gain.setTargetAtTime(val, audioCtx.currentTime, 0.05);
+        const db = val > 0 ? (20 * Math.log10(val)).toFixed(1) : "-∞"; dbReadout.innerText = db + " dB";
+    });
+
+    function updateDelayTime() {
+        if (!engineReady) return;
+        const bpm = parseFloat(document.getElementById('bpmVal').value) || 120;
+        const subdivision = parseFloat(document.getElementById('delayDiv').value);
+        if (audioCtx && audioCtx.state !== 'closed') echoNode.delayTime.setTargetAtTime((60 / bpm) * subdivision, audioCtx.currentTime, 0.05);
+    }
+    document.getElementById('bpmVal').addEventListener('input', updateDelayTime);
+    document.getElementById('delayDiv').addEventListener('change', updateDelayTime);
+
+    let tapTimes = [];
+    document.getElementById('tapBtn').addEventListener('click', () => {
+        wakeEngine();
+        const now = performance.now();
+        if (tapTimes.length > 0 && (now - tapTimes[tapTimes.length - 1]) > 2000) tapTimes = [];
+        tapTimes.push(now); if (tapTimes.length > 5) tapTimes.shift();
+        if (tapTimes.length > 1) {
+            let sum = 0; for (let i = 1; i < tapTimes.length; i++) sum += (tapTimes[i] - tapTimes[i-1]);
+            document.getElementById('bpmVal').value = Math.max(40, Math.min(Math.round(60000 / (sum / (tapTimes.length - 1))), 300));
+            updateDelayTime();
+        }
+    });
+
+    function triggerMechanics(velocity) {
+        if (!engineReady) return;
+        const noiseLvl = document.getElementById('noiseAmt').value; if (noiseLvl <= 0) return;
+        const noiseSrc = audioCtx.createBufferSource(); noiseSrc.buffer = noiseBuffer;
+        const noiseFilter = audioCtx.createBiquadFilter(); noiseFilter.type = "lowpass"; noiseFilter.frequency.value = 500;
+        const noiseEnv = audioCtx.createGain(); const peakLvl = (velocity / 127) * noiseLvl * 4.0;
+        noiseEnv.gain.setValueAtTime(0, audioCtx.currentTime);
+        noiseEnv.gain.linearRampToValueAtTime(peakLvl, audioCtx.currentTime + 0.005);
+        noiseEnv.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+        noiseSrc.connect(noiseFilter); noiseFilter.connect(noiseEnv); noiseEnv.connect(masterGain);
+        noiseSrc.start(); noiseSrc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    function noteAction(note, velocity) {
+        if (!wakeEngine()) return;
+        heldNotes = heldNotes.filter(n => n.note !== note); heldNotes.push({note, velocity}); updateEffectsMix();
+        if (!activeSynth) startNewNote(note, velocity); else glideToNote(note, velocity);
+        document.querySelectorAll('#growler-app-wrapper .key').forEach(k => k.classList.remove('active'));
+        document.querySelector(`#growler-app-wrapper [data-note="${note}"]`).classList.add('active');
+    }
+
+    function updateEffectsMix() {
+        if (!engineReady) return;
+        echoMix.gain.value = document.getElementById('delayAmt').value; echoFeedback.gain.value = 0.45;
+        reverbMix.gain.value = document.getElementById('reverbAmt').value;
+        const verbTime = document.getElementById('reverbTime').value;
+        combDelays.forEach(g => g.gain.value = verbTime);
+    }
+
+    function startNewNote(note, velocity) {
+        const baseFreq = 440 * Math.pow(2, (note - 69) / 12); const bentFreq = baseFreq * Math.pow(2, currentPitchBend / 12); const velScale = velocity / 127;
+        const osc = audioCtx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = bentFreq;
+        const filter = audioCtx.createBiquadFilter(); filter.type = "lowpass";
+        filter.frequency.value = Math.min(parseFloat(document.getElementById('filter').value) * (0.5 + (velScale * 1.0)), 10000);
+        const growlOsc = audioCtx.createOscillator(); const growlGain = audioCtx.createGain(); growlOsc.frequency.value = 62;
+        const growlDelay = parseFloat(document.getElementById('growlDelay').value);
+        const targetGrowl = parseFloat(document.getElementById('growlAmt').value) * (0.3 + (velScale * 1.5));
+        growlGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        growlGain.gain.setValueAtTime(0, audioCtx.currentTime + growlDelay);
+        growlGain.gain.linearRampToValueAtTime(targetGrowl, audioCtx.currentTime + growlDelay + 0.3);
+        const vibratoOsc = audioCtx.createOscillator(); const vibratoGain = audioCtx.createGain();
+        vibratoOsc.frequency.value = document.getElementById('vibSpeed').value;
+        const vibDepth = document.getElementById('vibDepth').value;
+        const vibDelay = parseFloat(document.getElementById('vibDelay').value);
+        vibratoGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        vibratoGain.gain.setValueAtTime(0, audioCtx.currentTime + vibDelay);
+        vibratoGain.gain.linearRampToValueAtTime(vibDepth, audioCtx.currentTime + vibDelay + 0.4);
+        const vca = audioCtx.createGain();
+        const attackTime = 0.3 - (parseFloat(document.getElementById('attackStrength').value) / 100) * 0.29;
+        vca.gain.value = 0; vca.gain.linearRampToValueAtTime(0.1 + (velScale * 0.3), audioCtx.currentTime + attackTime);
+        growlOsc.connect(growlGain); growlGain.connect(vca.gain);
+        vibratoOsc.connect(vibratoGain); vibratoGain.connect(osc.frequency);
+        osc.connect(filter); filter.connect(vca); vca.connect(masterGain);
+        osc.start(); growlOsc.start(); vibratoOsc.start(); triggerMechanics(velocity);
+        activeSynth = { osc, growlOsc, vibratoOsc, filter, growlGain, vca, baseFreq };
+    }
+
+    function glideToNote(note, velocity) {
+        if (!engineReady) return;
+        const baseFreq = 440 * Math.pow(2, (note - 69) / 12); const bentFreq = baseFreq * Math.pow(2, currentPitchBend / 12); const velScale = velocity / 127;
+        const glideTime = parseFloat(document.getElementById('glideTime').value); const now = audioCtx.currentTime;
+        activeSynth.baseFreq = baseFreq;
+        activeSynth.osc.frequency.setTargetAtTime(bentFreq, now, glideTime / 3);
+        activeSynth.filter.frequency.setTargetAtTime(Math.min(parseFloat(document.getElementById('filter').value) * (0.5 + (velScale * 1.0)), 10000), now, 0.1);
+        activeSynth.growlGain.gain.setTargetAtTime(parseFloat(document.getElementById('growlAmt').value) * (0.3 + (velScale * 1.5)), now, 0.1);
+    }
+
+    function noteOff(note) {
+        heldNotes = heldNotes.filter(n => n.note !== note);
+        if (heldNotes.length > 0) {
+            const lastNote = heldNotes[heldNotes.length - 1]; glideToNote(lastNote.note, lastNote.velocity);
+            document.querySelectorAll('#growler-app-wrapper .key').forEach(k => k.classList.remove('active'));
+            document.querySelector(`#growler-app-wrapper [data-note="${lastNote.note}"]`).classList.add('active');
+        } else {
+            document.querySelectorAll('#growler-app-wrapper .key').forEach(k => k.classList.remove('active'));
+            if (engineReady && activeSynth && audioCtx) {
+                const s = activeSynth; const now = audioCtx.currentTime;
+                s.vca.gain.cancelScheduledValues(now); s.vca.gain.setValueAtTime(s.vca.gain.value, now);
+                s.vca.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                s.osc.stop(now + 0.1); s.growlOsc.stop(now + 0.1); s.vibratoOsc.stop(now + 0.1); activeSynth = null;
+            }
+        }
+    }
+
+    function handleMIDIControl(cc, val) {
+        const norm = val / 127;
+        if (cc === 1) { const s = document.getElementById('growlAmt'); s.value = s.max * norm; s.dispatchEvent(new Event('input')); }
+        if (cc === 74) { const s = document.getElementById('filter'); s.value = parseFloat(s.min) + (parseFloat(s.max) - parseFloat(s.min)) * norm; s.dispatchEvent(new Event('input')); }
+    }
+
+    // --- MIDI ---
+    try {
+        if (navigator.requestMIDIAccess) {
+            navigator.requestMIDIAccess().then(access => {
+                document.getElementById('midi-status').innerText = "THE GROWLER MIDI ENGINE CONNECTED";
+                for (let input of access.inputs.values()) {
+                    input.onmidimessage = (msg) => {
+                        wakeEngine();
+                        const [cmd, data1, data2] = msg.data;
+                        if (cmd === 144 && data2 > 0) noteAction(data1, data2);
+                        else if (cmd === 128 || (cmd === 144 && data2 === 0)) noteOff(data1);
+                        else if (cmd === 176) handleMIDIControl(data1, data2);
+                        else if (cmd >= 224 && cmd <= 239) updatePitchBend((((data2 << 7) | data1) - 8192) / 8192 * 2);
+                    };
+                }
+            }).catch(() => {
+                document.getElementById('midi-status').innerText = "MIDI DISABLED - USE MOUSE OR TOUCH";
+            });
+        }
+    } catch(e) {}
+</script>
+
+</body>
+</html>
