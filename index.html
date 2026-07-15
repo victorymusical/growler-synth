@@ -97,6 +97,18 @@
         #growler-app-wrapper .key.black { background: linear-gradient(to bottom, #222 0%, #000 100%); width: 22px; height: 85px; margin-left: -11px; margin-right: -11px; z-index: 2; position: relative; border-radius: 0 0 3px 3px; box-shadow: inset 0 -3px 5px rgba(255,255,255,0.1), 2px 2px 5px rgba(0,0,0,0.5); }
         #growler-app-wrapper .key.active { background: var(--lava) !important; box-shadow: 0 0 25px var(--lava), inset 0 0 10px rgba(0,0,0,0.5) !important; }
         #growler-app-wrapper .status { margin-top: 20px; font-size: 0.55rem; color: #666; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+
+        /* CONNECTION GUIDE */
+        #growler-app-wrapper .midi-guide { width: 100%; max-width: 1050px; margin-top: 30px; background: var(--panel); border: 1px solid #1a1a1a; border-radius: 12px; padding: 25px 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.7); }
+        #growler-app-wrapper .midi-guide h3 { color: var(--gold); font-family: Georgia, serif; font-weight: 400; font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 15px; text-align: center; text-transform: uppercase; }
+        #growler-app-wrapper .midi-guide .guide-cols { display: flex; flex-wrap: wrap; gap: 20px; }
+        #growler-app-wrapper .midi-guide .guide-col { flex: 1 1 280px; background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 8px; padding: 18px; }
+        #growler-app-wrapper .midi-guide h4 { color: var(--gold-dark); font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
+        #growler-app-wrapper .midi-guide ol { margin: 0 0 0 18px; padding: 0; }
+        #growler-app-wrapper .midi-guide li { color: #aaa; font-size: 0.75rem; line-height: 1.7; margin-bottom: 4px; }
+        #growler-app-wrapper .midi-guide p { color: #888; font-size: 0.72rem; line-height: 1.7; margin-top: 12px; }
+        #growler-app-wrapper .midi-guide .hl { color: var(--gold); }
+        #growler-app-wrapper .midi-guide .lava { color: var(--lava); }
     </style>
 </head>
 <body>
@@ -197,6 +209,37 @@
         </div>
     </div>
     <div id="midi-status" class="status">Awaiting MIDI Controller...</div>
+
+    <div class="midi-guide">
+        <h3>Connect Your <span class="hl">MIDI Controller</span></h3>
+        <div class="guide-cols">
+            <div class="guide-col">
+                <h4>USB Connection (Recommended)</h4>
+                <ol>
+                    <li>Connect your controller to your computer with a USB cable (USB-C on the Travel Sax 2).</li>
+                    <li>Open this page in <span class="hl">Chrome or Edge</span> and click "Allow" when the browser asks for MIDI access.</li>
+                    <li>Your device name will appear in the status line above. Play!</li>
+                </ol>
+            </div>
+            <div class="guide-col">
+                <h4>Bluetooth MIDI Connection</h4>
+                <ol>
+                    <li><span class="hl">Mac:</span> Open Audio MIDI Setup, go to Window &gt; Show MIDI Studio, click the Bluetooth icon, and connect your device. Then open this page in Chrome.</li>
+                    <li><span class="hl">Windows:</span> Pair the device in Settings &gt; Bluetooth first. Windows Bluetooth MIDI support varies; a USB cable is the more reliable option.</li>
+                    <li>Once paired at the system level, the device appears here automatically, even if you pair after opening the page.</li>
+                </ol>
+            </div>
+            <div class="guide-col">
+                <h4>Wind Controllers &amp; Breath</h4>
+                <ol>
+                    <li>The Growler responds to <span class="lava">breath control (CC2)</span>: your air stream shapes the volume in real time, just like a real horn.</li>
+                    <li>Works out of the box with the <span class="hl">Odisei Travel Sax 2</span>, Akai EWI, Roland Aerophone, and other wind controllers, on any MIDI channel.</li>
+                    <li>Mod wheel (CC1) controls Flutter, CC74 controls Brightness, and pitch bend is fully supported.</li>
+                </ol>
+            </div>
+        </div>
+        <p>The Growler uses the Web MIDI API, supported in Chrome, Edge, and Opera on desktop and Android. Safari and iOS do not currently support Web MIDI; on those devices, use the on-screen keyboard.</p>
+    </div>
 </div>
 
 <script>
@@ -246,7 +289,9 @@
     });
 
     // --- AUDIO ENGINE ---
-    let audioCtx, masterGain, reverbMix, combDelays, echoNode, echoFeedback, echoMix, noiseBuffer;
+    let audioCtx, masterGain, breathBus, reverbMix, combDelays, echoNode, echoFeedback, echoMix, noiseBuffer;
+    let breathActive = false; // becomes true the first time a breath controller (CC2) is detected
+    let lastBreathTime = 0;
     let engineReady = false;
     let activeSynth = null; let heldNotes = [];
 
@@ -259,6 +304,7 @@
             const bufferSize = audioCtx.sampleRate * 1.0; noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const output = noiseBuffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
             masterGain = audioCtx.createGain(); masterGain.gain.value = parseFloat(document.getElementById('masterVol').value); masterGain.connect(audioCtx.destination);
+            breathBus = audioCtx.createGain(); breathBus.gain.value = 1; breathBus.connect(masterGain);
             reverbMix = audioCtx.createGain(); reverbMix.connect(audioCtx.destination);
             combDelays = [0.029, 0.034, 0.041, 0.049].map(t => {
                 const d = audioCtx.createDelay(); d.delayTime.value = t; const g = audioCtx.createGain();
@@ -328,10 +374,16 @@
 
     function noteAction(note, velocity) {
         if (!wakeEngine()) return;
+        // If a breath controller was used but has gone silent, restore full volume for mouse/touch play
+        if (breathActive && (performance.now() - lastBreathTime) > 3000) {
+            breathActive = false;
+            if (breathBus && audioCtx) breathBus.gain.setTargetAtTime(1, audioCtx.currentTime, 0.05);
+        }
         heldNotes = heldNotes.filter(n => n.note !== note); heldNotes.push({note, velocity}); updateEffectsMix();
         if (!activeSynth) startNewNote(note, velocity); else glideToNote(note, velocity);
         document.querySelectorAll('#growler-app-wrapper .key').forEach(k => k.classList.remove('active'));
-        document.querySelector(`#growler-app-wrapper [data-note="${note}"]`).classList.add('active');
+        const keyEl = document.querySelector(`#growler-app-wrapper [data-note="${note}"]`);
+        if (keyEl) keyEl.classList.add('active');
     }
 
     function updateEffectsMix() {
@@ -365,7 +417,7 @@
         vca.gain.value = 0; vca.gain.linearRampToValueAtTime(0.1 + (velScale * 0.3), audioCtx.currentTime + attackTime);
         growlOsc.connect(growlGain); growlGain.connect(vca.gain);
         vibratoOsc.connect(vibratoGain); vibratoGain.connect(osc.frequency);
-        osc.connect(filter); filter.connect(vca); vca.connect(masterGain);
+        osc.connect(filter); filter.connect(vca); vca.connect(breathBus);
         osc.start(); growlOsc.start(); vibratoOsc.start(); triggerMechanics(velocity);
         activeSynth = { osc, growlOsc, vibratoOsc, filter, growlGain, vca, baseFreq };
     }
@@ -385,7 +437,8 @@
         if (heldNotes.length > 0) {
             const lastNote = heldNotes[heldNotes.length - 1]; glideToNote(lastNote.note, lastNote.velocity);
             document.querySelectorAll('#growler-app-wrapper .key').forEach(k => k.classList.remove('active'));
-            document.querySelector(`#growler-app-wrapper [data-note="${lastNote.note}"]`).classList.add('active');
+            const lastKeyEl = document.querySelector(`#growler-app-wrapper [data-note="${lastNote.note}"]`);
+            if (lastKeyEl) lastKeyEl.classList.add('active');
         } else {
             document.querySelectorAll('#growler-app-wrapper .key').forEach(k => k.classList.remove('active'));
             if (engineReady && activeSynth && audioCtx) {
@@ -399,28 +452,54 @@
 
     function handleMIDIControl(cc, val) {
         const norm = val / 127;
+        if (cc === 2 || cc === 11) { // BREATH (Travel Sax 2 sends CC2) or Expression (CC11)
+            if (!engineReady || !breathBus || !audioCtx) return;
+            breathActive = true; lastBreathTime = performance.now();
+            // Perceptual curve: soft breath = quiet, full breath = full volume
+            const level = Math.pow(norm, 1.6);
+            breathBus.gain.setTargetAtTime(Math.max(level, 0.0001), audioCtx.currentTime, 0.02);
+        }
         if (cc === 1) { const s = document.getElementById('growlAmt'); s.value = s.max * norm; s.dispatchEvent(new Event('input')); }
         if (cc === 74) { const s = document.getElementById('filter'); s.value = parseFloat(s.min) + (parseFloat(s.max) - parseFloat(s.min)) * norm; s.dispatchEvent(new Event('input')); }
     }
 
-    // --- MIDI ---
+    // --- MIDI ENGINE v2 ---
+    // Listens on ALL MIDI channels (channel bits are masked off), supports hot-plug
+    // (Bluetooth MIDI devices that connect after page load), and full breath control
+    // for wind controllers like the Odisei Travel Sax 2 (breath = CC2).
+    function onMIDIMessage(msg) {
+        wakeEngine();
+        const status = msg.data[0];
+        const command = status & 0xF0; // strip the channel bits: works on any MIDI channel 1-16
+        const data1 = msg.data[1]; const data2 = msg.data[2];
+        if (command === 0x90 && data2 > 0) noteAction(data1, data2);
+        else if (command === 0x80 || (command === 0x90 && data2 === 0)) noteOff(data1);
+        else if (command === 0xB0) handleMIDIControl(data1, data2);
+        else if (command === 0xE0) updatePitchBend((((data2 << 7) | data1) - 8192) / 8192 * 2);
+    }
+
+    function bindMIDIInputs(access) {
+        const names = [];
+        for (let input of access.inputs.values()) {
+            input.onmidimessage = onMIDIMessage;
+            if (input.name) names.push(input.name.toUpperCase());
+        }
+        const statusEl = document.getElementById('midi-status');
+        if (names.length > 0) statusEl.innerText = "MIDI CONNECTED: " + names.join(" | ");
+        else statusEl.innerText = "MIDI READY - AWAITING CONTROLLER (USB OR BLUETOOTH)";
+    }
+
     try {
         if (navigator.requestMIDIAccess) {
             navigator.requestMIDIAccess().then(access => {
-                document.getElementById('midi-status').innerText = "THE GROWLER MIDI ENGINE CONNECTED";
-                for (let input of access.inputs.values()) {
-                    input.onmidimessage = (msg) => {
-                        wakeEngine();
-                        const [cmd, data1, data2] = msg.data;
-                        if (cmd === 144 && data2 > 0) noteAction(data1, data2);
-                        else if (cmd === 128 || (cmd === 144 && data2 === 0)) noteOff(data1);
-                        else if (cmd === 176) handleMIDIControl(data1, data2);
-                        else if (cmd >= 224 && cmd <= 239) updatePitchBend((((data2 << 7) | data1) - 8192) / 8192 * 2);
-                    };
-                }
+                bindMIDIInputs(access);
+                // Re-bind whenever a device connects or disconnects (critical for Bluetooth MIDI)
+                access.onstatechange = () => bindMIDIInputs(access);
             }).catch(() => {
                 document.getElementById('midi-status').innerText = "MIDI DISABLED - USE MOUSE OR TOUCH";
             });
+        } else {
+            document.getElementById('midi-status').innerText = "MIDI NOT SUPPORTED IN THIS BROWSER - USE CHROME OR EDGE";
         }
     } catch(e) {}
 </script>
